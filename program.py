@@ -24,6 +24,20 @@ def create_beras_table():
     ''')
     db.commit()
 
+def create_payment_table(db):
+    cursor = db.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS payment (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nama VARCHAR(100),
+            jumlah_jiwa INT,
+            total_beras DECIMAL(10,2),
+            total_uang DECIMAL(10,2),
+            tanggal DATETIME
+        )
+    ''')
+    db.commit()
+
 def tambah_data_beras():
     db = connect_db()
     cursor = db.cursor()
@@ -67,126 +81,69 @@ def tampilkan_data_beras():
         print(f"Error: Gagal mengambil data beras - {str(e)}")
         return None
 
-def create_payment_table(db):
-    cursor = db.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pembayaran (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            nama VARCHAR(100),
-            jumlah_jiwa INT,
-            jenis_zakat VARCHAR(10),
-            metode_pembayaran VARCHAR(50),
-            total_bayar DECIMAL(10,2),
-            nominal_dibayar DECIMAL(10,2),
-            kembalian DECIMAL(10,2),
-            keterangan TEXT,
-            tanggal_bayar DATETIME
-        )
-    ''')
-    db.commit()
-
 def tampilkan_data_pembayaran():
-    db = connect_db()
-    cursor = db.cursor()
-    print("\n=== Data Pembayaran Zakat ===")
-    cursor.execute("""
-        SELECT nama, jumlah_jiwa, metode_pembayaran, 
-               total_bayar, nominal_dibayar, kembalian, 
-               tanggal_bayar 
-        FROM pembayaran 
-        ORDER BY tanggal_bayar DESC
-    """)
-    hasil = cursor.fetchall()
-    
-    if not hasil:
-        print("Belum ada data pembayaran")
-        return
+    try:
+        db = connect_db()
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM payment')
+        hasil = cursor.fetchall()
         
-    print("-" * 100)
-    print(f"{'Nama':^20} | {'Jumlah Jiwa':^10} | {'Metode':^15} | {'Total':^15} | {'Dibayar':^15} | {'Kembalian':^15} | {'Tanggal':^20}")
-    print("-" * 100)
-    
-    for row in hasil:
-        print(f"{row[0]:<20} | {row[1]:^10} | {row[2]:^15} | Rp {float(row[3]):>11,.2f} | Rp {float(row[4]):>11,.2f} | Rp {float(row[5]):>11,.2f} | {row[6]}")
-    print("-" * 100)
+        if not hasil:
+            print("\nBelum ada data pembayaran")
+            return None
+            
+        print("\n=== Data Pembayaran Zakat ===")
+        print("-" * 80)
+        print(f"{'ID':^4} | {'Nama':^20} | {'Jumlah Jiwa':^12} | {'Total Beras':^12} | {'Total Uang':^15}")
+        print("-" * 80)
+        
+        for row in hasil:
+            print(f"{row[0]:^4} | {row[1]:^20} | {row[2]:^12} | {float(row[3]):^12.2f} | Rp {float(row[4]):>11,.2f}")
+        print("-" * 80)
+        return hasil
+    except mysql.connector.Error as e:
+        print(f"Error: Gagal mengambil data pembayaran - {str(e)}")
+        return None
 
 def tambah_pembayaran():
-    db = connect_db()
-    cursor = db.cursor()
     try:
-        print("\n=== Form Pembayaran Zakat ===")
-        nama = input("Nama pembayar: ")
-        jumlah_jiwa = int(input("Jumlah jiwa: "))
-        jenis_zakat = input("Jenis zakat (beras/uang): ").lower()
-        metode = input("Metode pembayaran (Tunai/Transfer): ").lower()
-        if metode not in ['tunai', 'transfer']:
-            print("Error: Metode pembayaran tidak valid!")
-            return
+        db = connect_db()
+        cursor = db.cursor()
         
-        if jenis_zakat == 'beras':
-            # Tampilkan daftar harga beras yang tersedia
-            daftar_beras = tampilkan_data_beras()
-            if not daftar_beras:
-                return
-                
-            # Pilih ID beras
-            id_beras = int(input("\nPilih ID beras yang digunakan: "))
-            
-            # Cari harga beras berdasarkan ID yang dipilih
-            harga_beras = None
-            for beras in daftar_beras:
-                if beras[0] == id_beras:
-                    harga_beras = beras[1]
-                    break
-            
-            if not harga_beras:
-                print("Error: ID beras tidak valid!")
-                return
-                
-            total_bayar = 3.5 * float(harga_beras) * jumlah_jiwa
-            keterangan = f"Beras ID {id_beras}: {3.5 * jumlah_jiwa} Liter"
-            
-        elif jenis_zakat == 'uang':
-            # Pembayaran dengan uang (2.5% dari total pendapatan)
-            pendapatan = float(input("Masukkan total pendapatan: Rp "))
-            total_bayar = pendapatan * 0.025
-            keterangan = f"Uang: 2.5% dari Rp {pendapatan:,.2f}"
-            
-        else:
-            print("Jenis zakat tidak valid!")
-            return
+        cursor.execute('SELECT harga FROM beras ORDER BY id DESC LIMIT 1')
+        hasil = cursor.fetchone()
         
-        print(f"\nTotal yang harus dibayar: Rp {total_bayar:,.2f}")
-        print(f"Keterangan: {keterangan}")
-        nominal_dibayar = float(input("Masukkan nominal pembayaran: Rp "))
-        
-        if nominal_dibayar < total_bayar:
-            print("Pembayaran kurang!")
+        if not hasil:
+            print("\nError: Belum ada data harga beras!")
             return
             
-        kembalian = nominal_dibayar - total_bayar
-        tanggal_bayar = datetime.now()
-
+        harga_beras = float(hasil[0])
+        print("\n=== Pembayaran Zakat ===")
+        nama = input("Masukkan nama: ")
+        jumlah_jiwa = int(input("Masukkan jumlah jiwa: "))
+        
+        total_beras = jumlah_jiwa * 2.5  # 2.5 liter per jiwa
+        total_uang = total_beras * harga_beras
+        
         cursor.execute('''
-            INSERT INTO pembayaran 
-            (nama, jumlah_jiwa, jenis_zakat, metode_pembayaran, total_bayar, 
-             nominal_dibayar, kembalian, keterangan, tanggal_bayar)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ''', (nama, jumlah_jiwa, jenis_zakat, metode, total_bayar, 
-              nominal_dibayar, kembalian, keterangan, tanggal_bayar))
-        db.commit()
+            INSERT INTO payment (nama, jumlah_jiwa, total_beras, total_uang, tanggal)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (nama, jumlah_jiwa, total_beras, total_uang, datetime.now()))
         
-        print("\nPembayaran berhasil!")
-        print(f"Kembalian: Rp {kembalian:,.2f}")
+        db.commit()
+        print("\nPembayaran zakat berhasil dicatat!")
+        print(f"Total yang harus dibayar: Rp {total_uang:,.2f}")
         
     except ValueError:
-        print("Input tidak valid! Pastikan semua input angka berupa numerik.")
+        print("Error: Input tidak valid!")
     except Exception as e:
-        print(f"Terjadi kesalahan: {str(e)}")
+        print(f"Error: {str(e)}")
+
 try:
     db = connect_db()
     cursor = db.cursor()
     create_beras_table()
+    create_payment_table(db)
 except mysql.connector.Error as e:
     print(f"Database connection failed: {e}")
     exit(1)
